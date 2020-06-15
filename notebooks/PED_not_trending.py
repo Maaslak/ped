@@ -28,10 +28,7 @@ import pandas as pd
 
 pd.set_option("colwidth", None)
 
-GB_videos_df = pd.read_csv(path + "/" + "GB_videos_5p.csv", sep=";", engine="python")
-US_videos_df = pd.read_csv(path + "/" + "US_videos_5p.csv", sep=";", engine="python")
-
-df = pd.concat([GB_videos_df, US_videos_df]).drop_duplicates().reset_index(drop=True)
+df = pd.read_csv(path + "/" + "videos_not_trending.csv", index_col=0)
 df = df.rename(columns={"description ": "description"})
 print(df.shape)
 df.head(3) 
@@ -145,9 +142,7 @@ df_by_video_id = df.groupby("video_id").agg({"title": lambda x: len(set(x))})
 df_by_video_id.sort_values(by="title", ascending=False).head(3)
 
 # %% colab={"base_uri": "https://localhost:8080/", "height": 167} colab_type="code" id="ltVrX64weytY" outputId="a1563f4c-80f1-403d-df0a-de3c79efd1a5"
-print(df[df["video_id"] == "w4SSZQDFuc8"].title.unique())
-print(df[df["video_id"] == "sfMwXjNo3Rs"].title.unique())
-print(df[df["video_id"] == "eVoXmDdI6Qg"].title.unique())
+print(df[df["video_id"] == "w_Ma8oQLmSM"].title.unique())
 
 # %% [markdown] colab_type="text" id="gJuyyri1ESHj"
 # ### Analyze distribution of 'category_id'
@@ -850,4 +845,4 @@ df.shape
 calc_embeddings(df, ["transormed_tags"], False)
 
 # %%
-df.to_csv(os.path.join(path, "text_attributes_all.csv"), index=False)
+df.to_csv(os.path.join(path, "text_attributes_all_not_trending.csv"), index=False)

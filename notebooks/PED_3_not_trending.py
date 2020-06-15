@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.4.1
+#       jupytext_version: 1.4.2
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
@@ -26,17 +26,32 @@ import scipy.stats as ss
 FIGURES_DIR=os.path.join('..', 'figures')
 
 # %%
-text_df = pd.read_csv(os.path.join('..', 'data', 'text_attributes_bedzju.csv'))
+text_df_not_trending = pd.read_csv(os.path.join('..', 'data', 'not_trending_text_attributes_all.csv'))
+img_df_not_trending = pd.read_csv(os.path.join('..', 'data', 'image_attributes_bedzju_not_trending.csv'))
+
+img_df_2_not_trending = pd.read_csv(os.path.join('..', 'data', 'image_attributes_not_trending_nawrba.csv'))
+# text_df_2_not_trending = pd.read_csv(os.path.join('..', 'data', 'not_trending_text_attributes_nawrba.csv'), index_col=0)
+
+# text_df_2_not_trending = text_df_2_not_trending.drop(text_df_2_not_trending.columns[0])
+# text_df_not_trending = text_df_not_trending.drop(text_df_2_not_trending.columns[0])
+
+# %%
+text_df_not_trending.columns, len(text_df_not_trending.columns)
+
+# %%
+text_df = pd.read_csv(os.path.join('..', 'data', 'text_attributes_all.csv'))
 img_df = pd.read_csv(os.path.join('..', 'data', 'image_attributes_bedzju.csv'))
 
 img_df_2 = pd.read_csv(os.path.join('..', 'data', 'image_attributes_nawrba.csv'))
-text_df_2 = pd.read_csv(os.path.join('..', 'data', 'text_attributes_nawrba.csv'))
+# text_df_2 = pd.read_csv(os.path.join('..', 'data', 'text_attributes_nawrba.csv'), index_col=0)
+
+# %%
+text_df.columns, len(text_df.columns)
 
 # %% [markdown]
 # #### Text DF preview
 
 # %%
-print(text_df.shape, img_df_2.shape, text_df_2.shape)
 text_df.head()
 
 # %% [markdown]
@@ -56,20 +71,41 @@ img_df.head()
 
 # %%
 text_df["image_filename"] = text_df["thumbnail_link"].apply(lambda x : x.replace('/', '').replace(':', '_'))
+text_df_not_trending["image_filename"] = text_df["thumbnail_link"].apply(lambda x : x.replace('/', '').replace(':', '_'))
 
-df = pd.concat([text_df, text_df_2, img_df_2], axis=1).set_index("image_filename").join(img_df.set_index("image_filename"))
-print(df.shape)
-print(df.columns)
+df = pd.concat([text_df, img_df_2], axis=1).set_index("image_filename").join(img_df.set_index("image_filename"))
+df_not_trending = pd.concat([text_df_not_trending, img_df_2_not_trending], axis=1).set_index("image_filename").join(img_df_not_trending.set_index("image_filename"))
+print(df.shape, df_not_trending.shape)
 
 df = df.reset_index()
-df.head()
+df_not_trending = df_not_trending.reset_index()
+print(df.head())
+print(df_not_trending.head())
+
+# %%
+df['trending'] = True
+df_not_trending['trending'] = False
+df.shape, df_not_trending.shape
+
+# %%
+df = pd.concat([df, df_not_trending])
+
+
+# %%
+df_not_trending.isnull().describe()
+
+# %%
+df.
 
 # %%
 list(df[['channel_title_embed', 'transormed_tags_embed', 'thumbnail_ocr_embed']].dtypes)
 
-
 # %%
+import math
+
 def cast_to_list(x):
+    if type(x) != str and math.isnan(x):
+        return None
     if x:
         return [float(num) for num in x[1:-1].replace("\n", "").split(" ") if num]
     else:

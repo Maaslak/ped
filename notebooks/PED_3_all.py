@@ -26,17 +26,32 @@ import scipy.stats as ss
 FIGURES_DIR=os.path.join('..', 'figures')
 
 # %%
-text_df = pd.read_csv(os.path.join('..', 'data', 'text_attributes_bedzju.csv'))
-img_df = pd.read_csv(os.path.join('..', 'data', 'image_attributes_bedzju.csv'))
+text_df = pd.read_csv(os.path.join('..', 'data', 'text_attributes_all.csv'))
+img_df = pd.read_csv(os.path.join('..', 'data', 'image_attributes_bedzju.csv')).drop_duplicates()
+img_df_2 = pd.read_csv(os.path.join('..', 'data', 'image_attributes_nawrba.csv')).drop_duplicates()
 
-img_df_2 = pd.read_csv(os.path.join('..', 'data', 'image_attributes_nawrba.csv'))
-text_df_2 = pd.read_csv(os.path.join('..', 'data', 'text_attributes_nawrba.csv'))
+
+# %%
+img_df_not_trending = pd.read_csv(os.path.join('..', 'data', 'image_attributes_bedzju_not_trending.csv')).drop_duplicates()
+
+img_df_2_not_trending = pd.read_csv(os.path.join('..', 'data', 'image_attributes_not_trending_nawrba.csv')).drop_duplicates()
+text_df_not_trending = pd.read_csv(os.path.join('..', 'data', 'not_trending_text_attributes_all.csv'))
+
+# %%
+img_df_2 = img_df_2.groupby('thumbnail_link').nth(0)
+img_df_2_not_trending = img_df_2_not_trending.groupby('thumbnail_link').nth(0)
+
+img_df_not_trending["image_filename"] = img_df_not_trending["image_filename"].apply(lambda x: x.replace("hqdefault.jpg", "default.jpg"))
+
+# %%
+img_df_not_trending.columns, img_df_2_not_trending.columns
 
 # %% [markdown]
 # #### Text DF preview
 
 # %%
-print(text_df.shape, img_df_2.shape, text_df_2.shape)
+print(img_df.shape, img_df_2.shape, text_df.shape)
+print(img_df_not_trending.shape, img_df_2_not_trending.drop_duplicates().shape, text_df_not_trending.shape)
 text_df.head()
 
 # %% [markdown]
@@ -47,6 +62,7 @@ text_df.head()
 for cname in img_df.columns:
     if 'histogram' in cname:
         img_df[cname] = img_df[cname].apply(lambda x : np.fromstring(x[1:-1], sep=' '))
+        img_df_not_trending[cname] = img_df_not_trending[cname].apply(lambda x : np.fromstring(x[1:-1], sep=' '))
 
 print(img_df.shape)
 img_df.head()
@@ -56,13 +72,20 @@ img_df.head()
 
 # %%
 text_df["image_filename"] = text_df["thumbnail_link"].apply(lambda x : x.replace('/', '').replace(':', '_'))
+text_df_not_trending["image_filename"] = text_df_not_trending["thumbnail_link"].apply(lambda x : x.replace('/', '').replace(':', '_'))
 
-df = pd.concat([text_df, text_df_2, img_df_2], axis=1).set_index("image_filename").join(img_df.set_index("image_filename"))
-print(df.shape)
-print(df.columns)
+df = text_df.merge(img_df_2, on=["thumbnail_link"], how="left").merge(img_df, on=["image_filename"], how="left")
+df_not_trending = text_df_not_trending.merge(img_df_2_not_trending, on=["thumbnail_link"], how="left").merge(img_df_not_trending, on=["image_filename"], how="left")
+print(df.shape, df_not_trending.shape)
+print(df.columns, df_not_trending.columns)
+
+df["is_trending"] = True
+df_not_trending["is_trending"] = False
+
+df = pd.concat([df, df_not_trending])
 
 df = df.reset_index()
-df.head()
+df
 
 # %%
 list(df[['channel_title_embed', 'transormed_tags_embed', 'thumbnail_ocr_embed']].dtypes)
@@ -70,16 +93,16 @@ list(df[['channel_title_embed', 'transormed_tags_embed', 'thumbnail_ocr_embed']]
 
 # %%
 def cast_to_list(x):
-    if x:
+    if x and x:
         return [float(num) for num in x[1:-1].replace("\n", "").split(" ") if num]
     else:
         return None
 
-for column in ['channel_title_embed', 'transormed_tags_embed', 'thumbnail_ocr_embed', "title_embed"]:
+for column in ['channel_title_embed',  'thumbnail_ocr_embed', 'transormed_tags_embed', "title_embed"]:
     df[column] = df[column].apply(cast_to_list)
 
 # %%
-df[['channel_title_embed', 'transormed_tags_embed', 'thumbnail_ocr_embed', "title_embed"]].isnull().describe()
+df[['channel_title_embed', 'transormed_tags_embed', 'thumbnail_ocr_embed', "title_embed"]].isnull().sum()
 
 # %% [markdown]
 # ## More textual features -> TF, TF IDF based
@@ -242,7 +265,7 @@ agg_df = df.groupby("video_id").agg(
     description_length_newlines=("description_length_newlines", "median"),
     description_uppercase_ratio=("description_uppercase_ratio", "mean"),
     description_url_count=("description_url_count", "median"),
-    description_top_domains_count=("description_top_domains_count", "median"),
+    # description_top_domains_count=("description_top_domains_count", "median"),
     description_emojis_counts = ('emojis_counts', "median"),
     
     has_detection=("has_detection", max_with_nans),
@@ -274,11 +297,22 @@ agg_df = df.groupby("video_id").agg(
     embed_channel_title=('channel_title_embed', reduce_medoid),
     embed_transormed_tags=('transormed_tags_embed', reduce_medoid), 
     embed_thumbnail_ocr=('thumbnail_ocr_embed', reduce_medoid),
+    
+    is_trending=('is_trending', lambda x: list(x)[0])
 )
 
 agg_df["title_onehot"] = list(map(list, X_pca))
 agg_df.head()
 
+
+# %%
+del df
+del text_df
+del img_df
+del img_df_2
+
+# %%
+agg_df
 
 # %% [markdown]
 # ### Extract subsets: numeric columns, non-numeric, histograms and videos with category_id given
@@ -294,10 +328,6 @@ agg_df_embeddings_numeric = pd.concat([
     for colname in agg_df_embeddings.columns
 ], axis=1)
 
-categories_df = pd.concat([agg_df.reset_index(drop=True), agg_df_embeddings_numeric], axis=1)[
-    ~agg_df.reset_index(drop=True)["category_id"].isna()
-]
-categories_df.shape
 
 # %% [markdown]
 # ### Analyze features stats
@@ -546,11 +576,30 @@ std_deviations.plot.bar(figsize=(14, 7), rot=45)
 # > Feature selection is performed using ANOVA F measure via the f_classif() function.
 
 # %%
-categories_df, agg_df_embeddings_numeric
-categories_df.columns
 
+FEATURE_SELECTION_COLUMNS = ['category_id', 'publish_time', 'views_median',
+       'views_max', 'likes_median', 'likes_max', 'dislikes_median',
+       'dislikes_max', 'comments_disabled', 'ratings_disabled',
+       'video_error_or_removed', 'week_day', 'time_of_day', 'month',
+       'title_changes', 'title_length_chars', 'title_length_tokens',
+       'title_uppercase_ratio', 'title_not_alnum_ratio',
+       'title_common_chars_count', 'channel_title_length_chars',
+       'channel_title_length_tokens', 'tags_count', 'description_changes',
+       'description_length_chars', 'description_length_tokens',
+       'description_length_newlines', 'description_uppercase_ratio',
+       'description_url_count', 'description_emojis_counts', 'has_detection',
+       'person_detected', 'object_detected', 'vehicle_detected',
+       'animal_detected', 'food_detected', 'face_count', 'gray_histogram',
+       'hue_histogram', 'saturation_histogram', 'value_histogram',
+       'gray_median', 'hue_median', 'saturation_median', 'value_median',
+       'edges', 'ocr_length_tokens', 'angry_count', 'surprise_count',
+       'fear_count', 'happy_count', 'is_trending',
+       'title_onehot']
 
 # %%
+import math
+from sklearn.model_selection import train_test_split
+
 def transform_onehot_df(df):
     for cname in df.columns:
         if 'onehot' in cname:
@@ -560,17 +609,39 @@ def transform_onehot_df(df):
             df = df.drop(columns=[cname])
     return df
 
-categories_df_numeric = transform_histogram_df(categories_df)
-categories_df_numeric = transform_onehot_df(categories_df)
+df_feature_selection = agg_df[FEATURE_SELECTION_COLUMNS]
 
-categories_df_numeric = categories_df_numeric[[cname for idx, cname in enumerate(categories_df_numeric.columns) if categories_df_numeric.dtypes[idx] in [np.int64, np.float64]]]
+with open(os.path.join("..", "data", "API_categories.json"), "r") as handle:
+    ids_to_categories_dict = json.load(handle)
+df_feature_selection["category_id"] = df_feature_selection[["category_id"]].apply(
+    # Fill missing categories
+    lambda row : ids_to_categories_dict.get(row.name, -1) if math.isnan(row.category_id) or row.category_id == -1 else row.category_id,
+    axis=1
+)
 
-y = categories_df_numeric["category_id"].values
-X = categories_df_numeric.drop(columns=["category_id", "trending_date"]).fillna(-1.0)
+df_feature_selection_numeric = transform_histogram_df(df_feature_selection)
+df_feature_selection_numeric = transform_onehot_df(df_feature_selection)
+
+df_feature_selection_numeric = df_feature_selection_numeric[
+    [cname for idx, cname in enumerate(df_feature_selection_numeric.columns) if df_feature_selection_numeric.dtypes[idx] in [np.int64, np.float64, np.bool]]
+]
+
+y = df_feature_selection_numeric["is_trending"].values
+X = df_feature_selection_numeric.drop(columns=["is_trending", "category_id"]).fillna(-1.0)
+
 X = (X - X.min()) / (X.max()-X.min()+1e-12) # normalize values - how about those that are missing?
+
+# Splitting
+
+
+train_idxs, test_idxs = train_test_split(np.arange(X.shape[0]), test_size=0.2)
 
 X_columns = X.columns
 X = X.values
+
+X = X[train_idxs]
+y = y[train_idxs]
+
 X.shape
 
 # %%
@@ -587,7 +658,7 @@ features = fit.transform(X)
 
 cols = selector.get_support(indices=True)
 print(list(X_columns[cols]))
-with open(os.path.join("..", "data", "anova_best.json"), "w") as fp:
+with open(os.path.join("..", "data", "anova_best_all_no_embeddings.json"), "w") as fp:
     json.dump(list(X_columns[cols]), fp)
 
 X_indices = np.arange(X.shape[-1])
@@ -610,7 +681,7 @@ features = fit.transform(X)
 cols = selector.get_support(indices=True)
 print(list(X_columns[cols]))
 
-with open(os.path.join("..", "data", "chi2_best.json"), "w") as fp:
+with open(os.path.join("..", "data", "chi2_best_all_no_embeddings.json"), "w") as fp:
     json.dump(list(X_columns[cols]), fp)
 
 X_indices = np.arange(X.shape[-1])
@@ -629,7 +700,7 @@ features = fit.transform(X)
 
 cols = selector.get_support(indices=True)
 print(list(X_columns[cols]))
-with open(os.path.join("..", "data", "mi_best.json"), "w") as fp:
+with open(os.path.join("..", "data", "mi_best_all_no_embeddings.json"), "w") as fp:
     json.dump(list(X_columns[cols]), fp)
 
 # %%
@@ -638,6 +709,7 @@ from sklearn.svm import SVC
 from sklearn.model_selection import StratifiedKFold
 from sklearn.feature_selection import RFECV
 from sklearn.datasets import make_classification
+
 
 # Create the RFE object and compute a cross-validated score.
 svc = SVC(kernel="linear", class_weight='balanced')
@@ -659,23 +731,26 @@ plt.show()
 print(X_columns[rfecv.get_support(indices=True)])
 
 # %%
-print(agg_df.shape)
+df_feature_selection_numeric
 
-agg_df_transformed = transform_histogram_df(agg_df)
-agg_df_transformed = transform_onehot_df(agg_df_transformed)
+# %%
+print(df_feature_selection.shape)
+agg_df_transformed = transform_histogram_df(df_feature_selection)
+agg_df_transformed = transform_onehot_df(df_feature_selection)
 
 print(agg_df_transformed.columns, agg_df_transformed.shape)
 
 
 # %%
-agg_df_transformed.to_csv(os.path.join("..", "data", "aggregated.csv"))
+agg_df_transformed.iloc[train_idxs].to_csv(os.path.join("..", "data", "aggregated_train_no_embeddings.csv"))
+agg_df_transformed.iloc[test_idxs].to_csv(os.path.join("..", "data", "aggregated_test_no_embeddings.csv"))
 
 # %%
-categories_df_numeric[X_columns[rfecv.get_support(indices=True)]].to_csv(os.path.join("..", "data", "selected_features.csv"))
+df_feature_selection[X_columns[rfecv.get_support(indices=True)]].to_csv(os.path.join("..", "data", "selected_features_all_no_embeddings.csv"))
 
 # %% jupyter={"outputs_hidden": false}
-selected = pd.read_csv(os.path.join(os.path.join("..", "data", "selected_features.csv")))
+selected = pd.read_csv(os.path.join(os.path.join("..", "data", "selected_features_all_no_embeddings.csv")))
 
 # %% jupyter={"outputs_hidden": false}
-with open(os.path.join("..", "data", "rfecv_best.json"), "w") as fp:
+with open(os.path.join("..", "data", "rfecv_best_all_no_embeddings.json"), "w") as fp:
     json.dump(list(selected.columns)[1:], fp)

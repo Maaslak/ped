@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.4.1
+#       jupytext_version: 1.4.2
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
@@ -29,13 +29,16 @@ import pandas as pd
 
 pd.set_option("colwidth", -1)
 
-GB_videos_df = pd.read_csv(path + "/" + "GB_videos_5p.csv", sep=";", engine="python")
-US_videos_df = pd.read_csv(path + "/" + "US_videos_5p.csv", sep=";", engine="python")
-
-df = pd.concat([GB_videos_df, US_videos_df]).drop_duplicates().reset_index(drop=True)
+df = pd.read_csv(os.path.join(path, "videos_not_trending.csv")).drop_duplicates().reset_index(drop=True)
 
 # %%
 df.columns
+
+# %%
+# df.thumbnail_link = df.thumbnail_link.apply(lambda x: x.replace("default.jpg", "hqdefault.jpg"))
+
+# %%
+df.thumbnail_link
 
 # %%
 len(df['thumbnail_link'].unique()), len(df['thumbnail_link'])
@@ -47,7 +50,7 @@ df
 # ## Downloading images
 
 # %%
-images_path = os.path.join(path, "images")
+images_path = os.path.join(path, "images2_small")
 try:
     os.mkdir(images_path)
 except FileExistsError:
@@ -119,23 +122,15 @@ for i in range(1, columns*rows +1):
 plt.show()
 
 # %% [markdown]
-# ### Display default picture
-
-# %%
-default_sample = mpimg.imread(os.path.join(images_path, "https_i.ytimg.comvi_0uV-jMbHQUdefault.jpg"))
-fig = plt.figure(figsize=(3, 3))
-plt.imshow(default_sample)
-print(default_sample.shape)
-
-# %% [markdown]
 # ### Add boolean `has thumbnail` attribute; True or False if image is default thumbnail
 
 # %%
 df["image_filename"] = df["thumbnail_link"].apply(lambda x : x.replace('/', '').replace(':', '_'))
 
-# %%
+# %% jupyter={"outputs_hidden": true}
 is_default_dict = {}
 def check_if_image_is_default(thumbnail_link, default_sample):
+    return False
     global is_default_dict
     images_path = '../data/images'
     image_filename = thumbnail_link.replace('/', '').replace(':', '_')
@@ -151,20 +146,23 @@ def check_if_image_is_default(thumbnail_link, default_sample):
             is_default_dict[image_filename] = is_default
             return is_default
 
-df["has_thumbnail"] = df["thumbnail_link"].apply(lambda x : not check_if_image_is_default(x, default_sample))
+df["has_thumbnail"] = df["thumbnail_link"].apply(lambda x : True)
 default_thumbnails = df[df["has_thumbnail"] == False]["image_filename"].values
 df.head(3)
 
-# %% [markdown]
-# ### (optional) - save list of default images to file, to avoid repeating the same work
+# %%
+exceptions = ["2xTAzZ2G9-g",
+"8wCVxatKsZQ",
+"fS_e7XFuyt0",]
+
+# df["thumbnail_link"][df["thumbnail_link"].str.contains("|".join(exceptions))]
+df["has_thumbnail"][df["thumbnail_link"].str.contains("|".join(exceptions))] = False
 
 # %%
-default_thumbnails = df[df["has_thumbnail"] == False]["image_filename"].values
+np.unique(df["has_thumbnail"].values)
 
-with open("../data/default_images.txt", "w") as handle:
-    for dt in default_thumbnails:
-        handle.write(dt)
-        handle.write('\n')
+# %%
+df["has_thumbnail"].sum(), df.count()
 
 # %% [markdown]
 # ### Prepare `df_images` dataframe that will store only UNIQUE links to images, which are not default images
@@ -174,6 +172,7 @@ df_images = pd.DataFrame(
     {"image_filename": np.unique(df.loc[df["has_thumbnail"] == True, "image_filename"].values)}
 )
 df_images.head(5)
+image_filenames = df_images["image_filename"].values
 print(df_images.shape)
 
 # %% [markdown]
@@ -234,6 +233,7 @@ for image_path in sample_images[:5]:
     
     print()
     print(image_path)
+    print(type(img))
     
     fig = plt.figure(figsize=(3, 3))
     plt.imshow(img)
@@ -244,7 +244,8 @@ for image_path in sample_images[:5]:
         detection = sorted(detectors_dict[d_name].detectObjectsFromImage(
                 input_image=img,
                 input_type="array",
-                minimum_percentage_probability=25
+                minimum_percentage_probability=25,
+                output_image_path="test.png"
             ), key=lambda x : -1*x["percentage_probability"]
         )
 
@@ -255,36 +256,85 @@ for image_path in sample_images[:5]:
     print(f"Haar Cascade faces -> number of detections = {len(detections)}")
 
 
+# %%
+detectors_dict[d_name].detectObjectsFromImage(
+                input_image=img,
+                input_type="array",
+                minimum_percentage_probability=25,
+                output_image_path="test.png"
+#                 output_type="array",
+            )
+
 # %% [markdown]
 # ### Perform YOLO detection on all thumbnails
 # > `WARNING`: This is taking a lot of time.
 # #### Result of running the cell below is written to `yolo_detections.json` file for convenience
 
 # %%
-image_filenames = df_images["image_filename"].values
+[name for name in os.listdir("../data/images2") if name.startswith("https:i.ytimg.comvi__")]
+
+# %%
 yolo_detections = []
 
-# for idx, i in enumerate(image_filenames):
-for idx, i in enumerate(image_filenames[:5]):
+for idx, i in enumerate(image_filenames):
+# for idx, i in enumerate(image_filenames[:5]):
     image_path = os.path.join(images_path, i)
-    img = mpimg.imread(image_path)
-    detection = sorted(yolo_d.detectObjectsFromImage(
-            input_image=img,
-            input_type="array",
-            minimum_percentage_probability=25
-        ), key=lambda x : -1*x["percentage_probability"]
-    )[:5] # assumption - take top 5 most confident
-    classes = [item["name"] for item in detection]
-    yolo_detections.append(classes)
-    print(f'"{i}": {str(classes)},')
+    try:
+        img = mpimg.imread(image_path.replace("https_", "https:")) # .replace("-", "_"))
+        detection = sorted(yolo_d.detectObjectsFromImage(
+                input_image=img,
+                input_type="array",
+                minimum_percentage_probability=25,
+                output_image_path="test.png"
+            ), key=lambda x : -1*x["percentage_probability"]
+        )[:5] # assumption - take top 5 most confident
+        classes = [item["name"] for item in detection]
+        yolo_detections.append(classes)
+    except FileNotFoundError:
+        print(f"File {image_path} not found!!!")
+    print(f'Step {idx + 1}/ {len(image_filenames)} "{i}": {str(classes)},')
 
-# %% [markdown]
-# ### Load `json` storing YOLO detections
-# > What are the most common detections?
+# %%
+df.thumbnail_link[df.thumbnail_link.str.contains("cxZb")]
 
 # %%
 import json
-with open("..\data\yolo_detections.json", "r") as handle:
+
+# %%
+with open("..\data\yolo_detections_not_trending_tmp", "w") as handle:
+    json.dump(yolo_detections, handle)
+# yolo_detections
+
+### Load `json` storing YOLO detections
+> What are the most common detections?
+
+# %%
+present_urls = []
+image_filenames = df_images["image_filename"].values
+
+for idx, i in enumerate(image_filenames):
+# for idx, i in enumerate(image_filenames[:5]):
+    image_path = os.path.join(images_path, i)
+    try:
+        img = mpimg.imread(image_path.replace("https_", "https:")) # .replace("-", "_"))
+        present_urls.append(image_path)
+    except FileNotFoundError:
+        print(f"File {image_path} not found!!!")
+
+
+# %%
+present_urls = [url.replace("../data/images2/", "") for url in present_urls]
+
+# %%
+yolo_detections_dict = {url: detection for url, detection in zip(present_urls, yolo_detections)}
+
+# %%
+with open("..\data\yolo_detections_not_trending.json", "w") as handle:
+    json.dump(yolo_detections_dict, handle)
+
+# %%
+import json
+with open("..\data\yolo_detections_not_trending.json", "r") as handle:
     yolo_detections_dict = json.load(handle)
     
 all_detections = []
@@ -356,12 +406,14 @@ image_filenames = df_images["image_filename"].values
 face_detections = []
 
 for idx, i in enumerate(image_filenames):
-    image_path = os.path.join(images_path, i)
+    image_path = os.path.join(images_path, i.replace("https_i", "https:i"))
     img = mpimg.imread(image_path)
     gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
     
     detections = face_cascade.detectMultiScale(gray, 1.03, 3)
     face_detections.append(len(detections))
+    if (idx + 1) % 200 == 0:
+        print(f"Step {idx} / {len(image_filenames)}")
 
 # %%
 face_detections = np.asarray(face_detections)
@@ -401,7 +453,7 @@ img_cache = {}
 def get_gray_histogram(image_filename):
     global img_cache
     if image_filename not in img_cache:
-        img = mpimg.imread(os.path.join(images_path, image_filename))
+        img = mpimg.imread(os.path.join(images_path, image_filename.replace("https_i", "https:i")))
         gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
         gray = gray[11:79, :] # remove top and bottom black rectangles
         img_cache[image_filename] = gray
@@ -413,7 +465,7 @@ def get_gray_histogram(image_filename):
 def get_median_gray_value(image_filename):
     global img_cache
     if image_filename not in img_cache:
-        img = mpimg.imread(os.path.join(images_path, image_filename))
+        img = mpimg.imread(os.path.join(images_path, image_filename.replace("https_i", "https:i")))
         gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
         gray = gray[11:79, :] # remove top and bottom black rectangles
         img_cache[image_filename] = gray
@@ -480,7 +532,7 @@ img_cache = {}
 def get_hsv_histogram(image_filename, channel="hue"):
     global img_cache
     if image_filename not in img_cache:
-        img = mpimg.imread(os.path.join(images_path, image_filename))
+        img = mpimg.imread(os.path.join(images_path, image_filename.replace("https_i", "https:i")))
         hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
         hsv = hsv[11:79, :, :] 
         img_cache[image_filename] = hsv
@@ -602,7 +654,7 @@ for i in range(len(patches)):
 
 # %%
 def get_edges(image_filename):
-    img = mpimg.imread(os.path.join(images_path, image_filename))
+    img = mpimg.imread(os.path.join(images_path, image_filename.replace("https_i", "https:i")))
     img = img[11:79, :, :]
     edges = cv2.Canny(img, 100, 200) / 255.0
     return np.sum(edges) / edges.size
@@ -626,7 +678,10 @@ n, bins, patches = plt.hist(edges, edgecolor='black', bins=BINS)
 df_images.head()
 
 # %%
-df_images.to_csv("..\data\image_attributes.csv", index=False)
+df_images.to_csv("../data/image_attributes_bedzju_not_trending.csv", index=False)
+
+# %%
+os.listdir("../data")
 
 # %% [markdown]
 # ### Voila!
