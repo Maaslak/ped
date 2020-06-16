@@ -629,9 +629,7 @@ std_deviations.plot.bar(figsize=(14, 7), rot=45)
 
 # %%
 
-FEATURE_SELECTION_COLUMNS = ['category_id', 'publish_time', 'views_median',
-       'views_max', 'likes_median', 'likes_max', 'dislikes_median',
-       'dislikes_max', 'comments_disabled', 'ratings_disabled',
+FEATURE_SELECTION_COLUMNS = ['category_id', 'publish_time', 'comments_disabled', 'ratings_disabled',
        'video_error_or_removed', 'week_day', 'time_of_day', 'month',
        'title_changes', 'title_length_chars', 'title_length_tokens',
        'title_uppercase_ratio', 'title_not_alnum_ratio',
@@ -756,6 +754,8 @@ with open(os.path.join("..", "data", "mi_best_all_no_embeddings.json"), "w") as 
     json.dump(list(X_columns[cols]), fp)
 
 # %%
+
+# %%
 import matplotlib.pyplot as plt
 from sklearn.svm import SVC
 from sklearn.model_selection import StratifiedKFold
@@ -782,6 +782,10 @@ plt.show()
 
 print(X_columns[rfecv.get_support(indices=True)])
 
+# %% jupyter={"outputs_hidden": false}
+with open(os.path.join("..", "data", "rfecv_best_all_no_embeddings.json"), "w") as fp:
+    json.dump(list(selected.columns)[1:], fp)
+
 # %%
 df_feature_selection_numeric
 
@@ -802,7 +806,3 @@ df_feature_selection[X_columns[rfecv.get_support(indices=True)]].to_csv(os.path.
 
 # %% jupyter={"outputs_hidden": false}
 selected = pd.read_csv(os.path.join(os.path.join("..", "data", "selected_features_all_no_embeddings.csv")))
-
-# %% jupyter={"outputs_hidden": false}
-with open(os.path.join("..", "data", "rfecv_best_all_no_embeddings.json"), "w") as fp:
-    json.dump(list(selected.columns)[1:], fp)

@@ -53,9 +53,9 @@ for cname in missing_values_df.columns:
         print("Missing values in column", cname, ":", check_nulls)
 
 # %% [markdown] colab_type="text" id="S0qEV6gbO41G"
-# There are NaNs in column `description`.
+# There are NaNs in column `description` and `trending date` - (thats obvious).
 #
-# **Solution**: Replace `NaN`s with "no description"
+# **Solution**: Replace `NaN`s with "no description", leave trending date as it is
 
 # %% colab={"base_uri": "https://localhost:8080/", "height": 117} colab_type="code" id="kYPvhOLo3ucr" outputId="6e416f75-ba35-4ce4-94b3-126a7645e3b1"
 df.loc[df["description"].isna(), "description"] = "no description"
@@ -71,8 +71,7 @@ df[df["tags"] == "[none]"].shape
 #
 # ### Video_id
 #
-# Some `video_ids` seem corrupted:
-# > #NAZWA?
+# No corrupted `video_ids`
 
 # %% colab={"base_uri": "https://localhost:8080/", "height": 154} colab_type="code" id="-oU8cukPeLH4" outputId="c206ae85-3aa7-48c0-a7d4-b07795836f12"
 print(
@@ -590,8 +589,8 @@ sns.distplot(lengths)
 
 # %%
 def count_newlines(x):
-    x = x.replace(r'\\n', r'\n')
-    return x.count(r'\n')
+    x = x.replace('\\n', '\n')
+    return x.count('\n')
 
 # ADD title_length_tokens attribute
 df["description_length_newlines"] = df["description"].apply(count_newlines)
