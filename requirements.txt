@@ -21,4 +21,5 @@ nlopt
 google-api-python-client
 google-auth-oauthlib 
 google-auth-httplib2
-graphviz
+shap
+xgboost==1.0.0
