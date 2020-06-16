@@ -249,8 +249,9 @@ def get_count_tfidf_embeddings(df, cname, split_cname, n_embeddings=20, N=50):
 
 pca_result, top_n_dict = get_count_tfidf_embeddings(df, "title", "is_trending")
 
-
 # %%
+df["description"]
+
 
 # %% [markdown]
 # ## Perform aggregations
@@ -344,24 +345,22 @@ agg_df = df.groupby("video_id").agg(
     is_trending=('is_trending', lambda x: list(x)[0])
 )
 
-# agg_df["title_onehot"] = list(map(list, X_pca))
-values, d1 = get_count_tfidf_embeddings(df, "title", "category_id")
-agg_df["title_onehot_category_id"] = values.tolist()
-
-values, d2 = get_count_tfidf_embeddings(df, "title", "is_trending")
-agg_df["title_onehot_is_trending"] = values.tolist()
-
-values, d3 = get_count_tfidf_embeddings(df, "title", "description")
-agg_df["description_onehot_is_trending"] = values.tolist()
-
-agg_df.head()
-
 
 # %%
-del df
-del text_df
-del img_df
-del img_df_2
+# agg_df["title_onehot"] = list(map(list, X_pca))
+values, d1 = get_count_tfidf_embeddings(df, "title", "category_id")
+agg_df["title_category_id_onehot"] = values.tolist()
+
+values, d2 = get_count_tfidf_embeddings(df, "title", "is_trending")
+agg_df["title_is_trending_onehot"] = values.tolist()
+
+values, d3 = get_count_tfidf_embeddings(df, "description", "is_trending")
+agg_df["description_is_trending_onehot"] = values.tolist()
+
+values, d3 = get_count_tfidf_embeddings(df, "description", "category_id")
+agg_df["description_category_id_onehot"] = values.tolist()
+
+agg_df.head()
 
 # %%
 agg_df
@@ -644,7 +643,7 @@ FEATURE_SELECTION_COLUMNS = ['category_id', 'publish_time', 'comments_disabled',
        'gray_median', 'hue_median', 'saturation_median', 'value_median',
        'edges', 'ocr_length_tokens', 'angry_count', 'surprise_count',
        'fear_count', 'happy_count', 'is_trending',
-       'title_onehot']
+       'title_is_trending_onehot', 'title_category_id_onehot', "description_is_trending_onehot", "description_category_id_onehot"]
 
 # %%
 import math
@@ -653,7 +652,8 @@ from sklearn.model_selection import train_test_split
 def transform_onehot_df(df):
     for cname in df.columns:
         if 'onehot' in cname:
-            prefix = cname.split('_')[0]
+            print(cname)
+            prefix = "_".join(cname.split('_')[:-1])
             for i in range(len(df[cname].values[0])):
                 df[f"{prefix}_{i}_bin"] = df[cname].apply(lambda x : x[i])
             df = df.drop(columns=[cname])
@@ -693,6 +693,9 @@ X = X[train_idxs]
 y = y[train_idxs]
 
 X.shape
+
+# %%
+df_feature_selection_numeric
 
 # %%
 from sklearn.feature_selection import SelectKBest
@@ -754,8 +757,6 @@ with open(os.path.join("..", "data", "mi_best_all_no_embeddings.json"), "w") as 
     json.dump(list(X_columns[cols]), fp)
 
 # %%
-
-# %%
 import matplotlib.pyplot as plt
 from sklearn.svm import SVC
 from sklearn.model_selection import StratifiedKFold
@@ -767,8 +768,8 @@ from sklearn.datasets import make_classification
 svc = SVC(kernel="linear", class_weight='balanced')
 # The "accuracy" scoring is proportional to the number of correct
 # classifications
-rfecv = RFECV(estimator=svc, step=1, cv=StratifiedKFold(n_splits=15, shuffle=True, random_state=15042020),
-              scoring='accuracy')
+rfecv = RFECV(estimator=svc, step=10, cv=StratifiedKFold(n_splits=15, shuffle=True, random_state=15042020),
+              scoring='accuracy', verbose=5)
 rfecv.fit(X, y)
 
 print("Optimal number of features : %d" % rfecv.n_features_)
@@ -781,10 +782,6 @@ plt.plot(range(1, len(rfecv.grid_scores_) + 1), rfecv.grid_scores_)
 plt.show()
 
 print(X_columns[rfecv.get_support(indices=True)])
-
-# %% jupyter={"outputs_hidden": false}
-with open(os.path.join("..", "data", "rfecv_best_all_no_embeddings.json"), "w") as fp:
-    json.dump(list(selected.columns)[1:], fp)
 
 # %%
 df_feature_selection_numeric
@@ -802,7 +799,11 @@ agg_df_transformed.iloc[train_idxs].to_csv(os.path.join("..", "data", "aggregate
 agg_df_transformed.iloc[test_idxs].to_csv(os.path.join("..", "data", "aggregated_test_no_embeddings.csv"))
 
 # %%
-df_feature_selection[X_columns[rfecv.get_support(indices=True)]].to_csv(os.path.join("..", "data", "selected_features_all_no_embeddings.csv"))
+df_feature_selection_numeric[X_columns[rfecv.get_support(indices=True)]].to_csv(os.path.join("..", "data", "selected_features_all_no_embeddings.csv"))
 
 # %% jupyter={"outputs_hidden": false}
 selected = pd.read_csv(os.path.join(os.path.join("..", "data", "selected_features_all_no_embeddings.csv")))
+
+# %% jupyter={"outputs_hidden": false}
+with open(os.path.join("..", "data", "rfecv_best_all_no_embeddings.json"), "w") as fp:
+    json.dump(list(selected.columns)[1:], fp)
