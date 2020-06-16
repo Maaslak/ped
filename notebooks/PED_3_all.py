@@ -32,8 +32,7 @@ img_df_2 = pd.read_csv(os.path.join('..', 'data', 'image_attributes_nawrba.csv')
 
 
 # %%
-img_df_not_trending = pd.read_csv(os.path.join('..', 'data', 'image_attributes_bedzju_not_trending.csv')).drop_duplicates()
-
+img_df_not_trending = pd.read_csv(os.path.join('..', 'data', 'image_attributes_bedzju_not_trending_corr.csv')).drop_duplicates()
 img_df_2_not_trending = pd.read_csv(os.path.join('..', 'data', 'image_attributes_not_trending_nawrba.csv')).drop_duplicates()
 text_df_not_trending = pd.read_csv(os.path.join('..', 'data', 'not_trending_text_attributes_all.csv'))
 
@@ -208,6 +207,51 @@ sns.scatterplot(
   })); 
 
 
+# %%
+def onehot_encode(x, BOW):
+    x_lower = x.lower()
+    result = np.zeros(shape=len(BOW), dtype=np.uint8)
+    for idx, w in enumerate(BOW):
+        if w in x_lower:
+            result[idx] += 1
+    return result
+
+def get_count_tfidf_embeddings(df, cname, split_cname, n_embeddings=20, N=50):
+    vectorizer = TfidfVectorizer(stop_words='english')
+    vectors = vectorizer.fit_transform(np.unique(df[cname].values))
+
+    bow = []
+    top_n_dict = {i : {} for i in df[split_cname].value_counts().keys()}
+    
+    for i in df[split_cname].value_counts().keys():
+        words = np.unique(df[df[split_cname] == i][cname].values)
+        words1 = [w[0] for w in get_top_n_words(words, n=N)]
+        words2 = [w[0] for w in top_tfidf_scores(words, n=N)]
+        bow.extend(words1); bow.extend(words2)
+        top_n_dict[i]["top-n"] = words1
+        top_n_dict[i]["tfidf"] = words2
+        
+    bow = list(sorted(set(bow)))    
+
+    words_onehot = []
+    new_cname = f"{cname}_onehot_{split_cname}"
+    df[new_cname] = df[cname].apply(lambda x : onehot_encode(x, bow))
+
+    bow_agg_df = df.groupby("video_id").agg(
+        values=(new_cname, reduce_histogram),
+        is_trending=("is_trending", lambda s : max(s)),
+    ).reset_index()
+
+    X = np.stack(bow_agg_df["values"].values, axis=0)
+    pca = PCA(n_components=n_embeddings)
+    X_pca = pca.fit_transform(X)
+    return X_pca , top_n_dict
+
+pca_result, top_n_dict = get_count_tfidf_embeddings(df, "title", "is_trending")
+
+
+# %%
+
 # %% [markdown]
 # ## Perform aggregations
 
@@ -252,7 +296,6 @@ agg_df = df.groupby("video_id").agg(
     title_uppercase_ratio=("title_uppercase_ratio", "mean"),
     title_not_alnum_ratio=("title_not_alnum_ratio", "mean"),
     title_common_chars_count=("title_common_chars_count", "median"),
-#     title_onehot=("title_onehot", reduce_histogram),
     
     channel_title_length_chars=("channel_title_length_chars", "median"),
     channel_title_length_tokens=("channel_title_length_tokens", "median"),
@@ -301,7 +344,16 @@ agg_df = df.groupby("video_id").agg(
     is_trending=('is_trending', lambda x: list(x)[0])
 )
 
-agg_df["title_onehot"] = list(map(list, X_pca))
+# agg_df["title_onehot"] = list(map(list, X_pca))
+values, d1 = get_count_tfidf_embeddings(df, "title", "category_id")
+agg_df["title_onehot_category_id"] = values.tolist()
+
+values, d2 = get_count_tfidf_embeddings(df, "title", "is_trending")
+agg_df["title_onehot_is_trending"] = values.tolist()
+
+values, d3 = get_count_tfidf_embeddings(df, "title", "description")
+agg_df["description_onehot_is_trending"] = values.tolist()
+
 agg_df.head()
 
 
