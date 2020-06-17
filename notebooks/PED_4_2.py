@@ -272,6 +272,8 @@ disp = plot_confusion_matrix(label_spread, X, y,
 
 
 # %%
+label_spread_pred_all = label_spread.predict(X_all)
+
 sns.scatterplot(
     x='c1', 
     y='c2',
@@ -281,12 +283,29 @@ sns.scatterplot(
       'c1': X_pca_all[:, 0],
       'c2': X_pca_all[:, 1],
       'category': list(map(lambda x: categories.get(int(x), "undefined"),
-                          label_spread.predict(X_all))),
+                          label_spread_pred_all)),
         'correct': list(map(
-            lambda x : 15 if x[0] == x[1] else 1, zip(y_all, label_spread.predict(X_all))))
+            lambda x : 15 if x[0] == x[1] else 1, zip(y_all, label_spread_pred_all)))
   }))
 
 plt.show()
+
+# %%
+
+correct_labels_df = pd.read_csv(os.path.join("..", "data", "labels_trending"))
+mask_no_missing = correct_labels_df.category_id_true != -1
+
+def plot_validation(y_true_series, y_pred):
+    print(classification_report(y_true_series.values, y_pred))
+
+    classes = sorted(y_true_series.unique())
+
+    cm = confusion_matrix(y_true_series.values, y_pred, labels=classes)
+    class_labels = [categories[int_class] for int_class in classes]
+    sns.heatmap(cm, annot=True, yticklabels=class_labels, xticklabels=class_labels)
+    plt.show()
+
+plot_validation(correct_labels_df[mask_no_missing].category_id_true, label_spread_pred_all[mask_no_missing.values])
 
 # %% [markdown]
 # ## Entropies
@@ -372,122 +391,122 @@ for c in label_spread.classes_:
 
 # %%
 
-import numpy as np
-from scipy import stats
+# import numpy as np
+# from scipy import stats
 
 
-class SSGaussianMixture(object):
-    def __init__(self, n_features, n_categories):
-        self.n_features = n_features
-        self.n_categories = n_categories
+# class SSGaussianMixture(object):
+#     def __init__(self, n_features, n_categories):
+#         self.n_features = n_features
+#         self.n_categories = n_categories
 
-        self.mus = np.array([np.random.randn(n_features)] * n_categories)
-        self.sigmas = np.array([np.eye(n_features)] * n_categories)
-        self.pis = np.array([1 / n_categories] * n_categories)
+#         self.mus = np.array([np.random.randn(n_features)] * n_categories)
+#         self.sigmas = np.array([np.eye(n_features)] * n_categories)
+#         self.pis = np.array([1 / n_categories] * n_categories)
 
-    def fit(self, X_train, y_train, X_test, threshold=0.00001, max_iter=100):
-        Z_train = np.eye(self.n_categories)[y_train]
+#     def fit(self, X_train, y_train, X_test, threshold=0.00001, max_iter=100):
+#         Z_train = np.eye(self.n_categories)[y_train]
 
-        for i in range(max_iter):
-            # EM algorithm
-            # M step
-            Z_test = np.array([self.gamma(X_test, k) for k in range(self.n_categories)]).T
-            Z_test /= Z_test.sum(axis=1, keepdims=True)
+#         for i in range(max_iter):
+#             # EM algorithm
+#             # M step
+#             Z_test = np.array([self.gamma(X_test, k) for k in range(self.n_categories)]).T
+#             Z_test /= Z_test.sum(axis=1, keepdims=True)
 
-            # E step
-            datas = [X_train, Z_train, X_test, Z_test]
-            mus = np.array([self._est_mu(k, *datas) for k in range(self.n_categories)])
-            sigmas = np.array([self._est_sigma(k, *datas) for k in range(self.n_categories)])
-            pis = np.array([self._est_pi(k, *datas) for k in range(self.n_categories)])
+#             # E step
+#             datas = [X_train, Z_train, X_test, Z_test]
+#             mus = np.array([self._est_mu(k, *datas) for k in range(self.n_categories)])
+#             sigmas = np.array([self._est_sigma(k, *datas) for k in range(self.n_categories)])
+#             pis = np.array([self._est_pi(k, *datas) for k in range(self.n_categories)])
 
-            diff = max(np.max(np.abs(mus - self.mus)),
-                       np.max(np.abs(sigmas - self.sigmas)),
-                       np.max(np.abs(pis - self.pis)))
+#             diff = max(np.max(np.abs(mus - self.mus)),
+#                        np.max(np.abs(sigmas - self.sigmas)),
+#                        np.max(np.abs(pis - self.pis)))
 
-            print(f"{i + 1}/{max_iter} diff = {diff} conv matrix max = {np.max(sigmas)} min {np.min(sigmas)}")
-            self.mus = mus
-            self.sigmas = sigmas
-            self.pis = pis
-            if diff < threshold:
-                break
+#             print(f"{i + 1}/{max_iter} diff = {diff} conv matrix max = {np.max(sigmas)} min {np.min(sigmas)}")
+#             self.mus = mus
+#             self.sigmas = sigmas
+#             self.pis = pis
+#             if diff < threshold:
+#                 break
 
-    def predict_proba(self, X):
-        Z_pred = np.array([self.gamma(X, k) for k in range(self.n_categories)]).T
-        Z_pred /= Z_pred.sum(axis=1, keepdims=True)
-        return Z_pred
+#     def predict_proba(self, X):
+#         Z_pred = np.array([self.gamma(X, k) for k in range(self.n_categories)]).T
+#         Z_pred /= Z_pred.sum(axis=1, keepdims=True)
+#         return Z_pred
 
-    def gamma(self, X, k):
-        # X is input vectors, k is feature index
-        return stats.multivariate_normal.pdf(X, mean=self.mus[k], cov=self.sigmas[k], allow_singular=True)
+#     def gamma(self, X, k):
+#         # X is input vectors, k is feature index
+#         return stats.multivariate_normal.pdf(X, mean=self.mus[k], cov=self.sigmas[k], allow_singular=True)
 
-    def _est_mu(self, k, X_train, Z_train, X_test, Z_test):
-        mu = (Z_train[:, k] @ X_train + Z_test[:, k] @ X_test).T / \
-             (Z_train[:, k].sum() + Z_test[:, k].sum())
-        return mu
+#     def _est_mu(self, k, X_train, Z_train, X_test, Z_test):
+#         mu = (Z_train[:, k] @ X_train + Z_test[:, k] @ X_test).T / \
+#              (Z_train[:, k].sum() + Z_test[:, k].sum())
+#         return mu
 
-    def _est_sigma(self, k, X_train, Z_train, X_test, Z_test):
-        cmp1 = (X_train - self.mus[k]).T @ np.diag(Z_train[:, k]) @ (X_train - self.mus[k])
-        cmp2 = (X_test - self.mus[k]).T @ np.diag(Z_test[:, k]) @ (X_test - self.mus[k])
-        sigma = (cmp1 + cmp2) / (Z_train[:, k].sum() + Z_test[:k].sum())
-        return sigma
+#     def _est_sigma(self, k, X_train, Z_train, X_test, Z_test):
+#         cmp1 = (X_train - self.mus[k]).T @ np.diag(Z_train[:, k]) @ (X_train - self.mus[k])
+#         cmp2 = (X_test - self.mus[k]).T @ np.diag(Z_test[:, k]) @ (X_test - self.mus[k])
+#         sigma = (cmp1 + cmp2) / (Z_train[:, k].sum() + Z_test[:k].sum())
+#         return sigma
 
-    def _est_pi(self, k, X_train, Z_train, X_test, Z_test):
-        pi = (Z_train[:, k].sum() + Z_test[:, k].sum()) / \
-             (Z_train.sum() + Z_test.sum())
-        return pi
+#     def _est_pi(self, k, X_train, Z_train, X_test, Z_test):
+#         pi = (Z_train[:, k].sum() + Z_test[:, k].sum()) / \
+#              (Z_train.sum() + Z_test.sum())
+#         return pi
 
-# Below is just a lapper object.
+# # Below is just a lapper object.
 
-from sklearn.preprocessing import StandardScaler
-from sklearn.pipeline import Pipeline
+# from sklearn.preprocessing import StandardScaler
+# from sklearn.pipeline import Pipeline
 
-from sklearn import preprocessing
+# from sklearn import preprocessing
 
 
-class BaseClassifier(object):
-    def __init__(self, n_categories):
-        self.n_categories = n_categories
-        self.preprocess = Pipeline([('scaler', StandardScaler())])
-        self.label_encoder = preprocessing.LabelEncoder()
+# class BaseClassifier(object):
+#     def __init__(self, n_categories):
+#         self.n_categories = n_categories
+#         self.preprocess = Pipeline([('scaler', StandardScaler())])
+#         self.label_encoder = preprocessing.LabelEncoder()
 
-    def fit(self, X_train, y_train, X_test, max_iter=10, cv_qda=2, cv_meta=2):
-        X_train_org = X_train
-        self.label_encoder.fit(y_train)
-        y_train = self.label_encoder.transform(y_train)
+#     def fit(self, X_train, y_train, X_test, max_iter=10, cv_qda=2, cv_meta=2):
+#         X_train_org = X_train
+#         self.label_encoder.fit(y_train)
+#         y_train = self.label_encoder.transform(y_train)
 
-        self.preprocess_tune(np.vstack([X_train, X_test]))
-        X_train = self.preprocess.transform(X_train)
-        X_test = self.preprocess.transform(X_test)
+#         self.preprocess_tune(np.vstack([X_train, X_test]))
+#         X_train = self.preprocess.transform(X_train)
+#         X_test = self.preprocess.transform(X_test)
 
-        self.cgm = SSGaussianMixture(
-            n_features=X_train.shape[1],
-            n_categories=self.n_categories,
-        )
-        _, unique_counts = np.unique(y, return_counts=True)
-        self.cgm.pis = unique_counts / np.sum(unique_counts)
-        self.cgm.fit(X_train, y_train, X_test, max_iter=max_iter)
+#         self.cgm = SSGaussianMixture(
+#             n_features=X_train.shape[1],
+#             n_categories=self.n_categories,
+#         )
+#         _, unique_counts = np.unique(y, return_counts=True)
+#         self.cgm.pis = unique_counts / np.sum(unique_counts)
+#         self.cgm.fit(X_train, y_train, X_test, max_iter=max_iter)
 
-    def predict(self, X):
-        X = self.preprocess.transform(X)
-        y_prob = self.cgm.predict_proba(X)
-        y = np.argmax(y_prob, axis=-1)
-        return self.label_encoder.inverse_transform(y)
+#     def predict(self, X):
+#         X = self.preprocess.transform(X)
+#         y_prob = self.cgm.predict_proba(X)
+#         y = np.argmax(y_prob, axis=-1)
+#         return self.label_encoder.inverse_transform(y)
 
-    def preprocess_tune(self, X):
-        self.preprocess.fit(X)
+#     def preprocess_tune(self, X):
+#         self.preprocess.fit(X)
 
-    def validation(self, X, y):
-        y_pred = self.predict(X)
+#     def validation(self, X, y):
+#         y_pred = self.predict(X)
 
-        cm = confusion_matrix(y, y_pred)  # , labels=label_spread.classes_)
+#         cm = confusion_matrix(y, y_pred)  # , labels=label_spread.classes_)
 
-        print(classification_report(y, y_pred))
+#         print(classification_report(y, y_pred))
 
-        sns.heatmap(cm, annot=True)
-        plt.show()
+#         sns.heatmap(cm, annot=True)
+#         plt.show()
 
-n_categoties = len(np.unique(y))
-bc = BaseClassifier(n_categoties)
+# n_categoties = len(np.unique(y))
+# bc = BaseClassifier(n_categoties)
 
 
 # %% [markdown]
@@ -513,7 +532,7 @@ np.array([
 
 # %%
 # Decided to remove
-to_be_removed = [27, 31, 58, 15, 11, 29, 33, 35, 47]
+to_be_removed = [5, 12, 41, 58, 6, 13, 33, 46, 50]
 cleaned_X_all = np.delete(X_all, to_be_removed, axis=1)
 cleaned_X = np.delete(X, to_be_removed, axis=1)
 
@@ -536,8 +555,8 @@ cleaned_X_no_labels.shape, cleaned_X_no_labels[:,:20].shape
 # ### First approach generating very poor results
 
 # %%
-bc.fit(cleaned_X, y, cleaned_X_no_labels, max_iter=20)
-bc.validation(cleaned_X, y)
+# bc.fit(cleaned_X, y, cleaned_X_no_labels, max_iter=20)
+# bc.validation(cleaned_X, y)
 
 # %% [markdown]
 # ### Our implementation of SSGMM
@@ -612,7 +631,7 @@ def get_probs_ssgmm(X, y, num_iterations=5):
     return Pij, [means, covs, qs]
 
 
-probs, [means, covs, qs] = get_probs_ssgmm(cleaned_X_all, y_all, num_iterations=20)
+probs, [means, covs, qs] = get_probs_ssgmm(cleaned_X_all, y_all, num_iterations=7)
 
 
 # %% [markdown]
@@ -670,18 +689,14 @@ plt.show()
 # %%
 correct_labels_df = pd.read_csv(os.path.join("..", "data", "labels_trending"))
 
-print(classification_report(correct_labels_df.values, gmm_y_all_pred))
-
-cm = confusion_matrix(correct_labels_df.values, gmm_y_all_pred)
-sns.heatmap(cm, annot=True)
-plt.show()
+plot_validation(correct_labels_df[mask_no_missing].category_id_true, gmm_y_all_pred[mask_no_missing.values])
 
 # %%
 from scipy import stats
 
 # #############################################################################
 # Calculate uncertainty values for each transduced distribution
-pred_entropies = stats.distributions.entropy(probs.T)
+pred_entropies = stats.distributions.entropy(gmm_y_all_proba.T)
 print(pred_entropies.shape)
 
 sns.distplot(pred_entropies)
@@ -689,7 +704,7 @@ plt.show()
 
 # %%
 transductions_entropies = list(zip(
-    y_pred_all, 
+    gmm_y_all_pred, 
     pred_entropies,
     [i for i in range(len(pred_entropies))]
 ))
@@ -714,7 +729,7 @@ for c in label_spread.classes_:
 
 # %%
 transductions_entropies = list(zip(
-    y_pred_all, 
+    gmm_y_all_pred, 
     pred_entropies,
     [i for i in range(len(pred_entropies))]
 ))
@@ -738,7 +753,7 @@ for c in label_spread.classes_:
 
 # %%
 transductions_entropies = list(zip(
-    y_pred_all, 
+    gmm_y_all_pred, 
     pred_entropies,
     [i for i in range(len(pred_entropies))]
 ))
