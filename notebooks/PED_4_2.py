@@ -319,7 +319,7 @@ df.head(3)
 # %% [markdown]
 # ## Least certain
 
-# %% jupyter={"outputs_hidden": true}
+# %%
 transductions_entropies = list(zip(
     label_spread.transduction_, 
     pred_entropies,
@@ -344,7 +344,7 @@ for c in label_spread.classes_:
 # %% [markdown]
 # ## Most certain
 
-# %% jupyter={"outputs_hidden": true}
+# %%
 transductions_entropies = list(zip(
     label_spread.transduction_, 
     pred_entropies,
@@ -513,8 +513,8 @@ np.array([
 
 # %%
 # Decided to remove
-to_be_removed = [14, 13, 32, 47, 53, 61, 23]
- = np.delete(X_all, to_be_removed, axis=1)
+to_be_removed = [27, 31, 58, 15, 11, 29, 33, 35, 47]
+cleaned_X_all = np.delete(X_all, to_be_removed, axis=1)
 cleaned_X = np.delete(X, to_be_removed, axis=1)
 
 corr_mat = pd.DataFrame(cleaned_X_all).corr()
@@ -612,14 +612,14 @@ def get_probs_ssgmm(X, y, num_iterations=5):
     return Pij, [means, covs, qs]
 
 
-probs, [means, covs, qs] = get_probs_ssgmm(cleaned_X_all, y_all, num_iterations=2)
+probs, [means, covs, qs] = get_probs_ssgmm(cleaned_X_all, y_all, num_iterations=20)
 
 
 # %% [markdown]
 # ### GMM results analysis
 
 # %%
-def predict_proba(X, y, means, covs, qs):
+def predict_proba(X, means, covs, qs):
     num_samples, n_features = X.shape
     n_categories = len(unique_labels)
     Pij = np.zeros((num_samples, n_categories))
@@ -629,20 +629,28 @@ def predict_proba(X, y, means, covs, qs):
             for cat_num, q in zip(range(n_categories), qs)
         ])
         Pij[i] = ps / sum(ps)
+        
+        if (i + 1) % 500 == 0:
+            print(f"Step {i+1}/{num_samples}")
     return Pij
 
-gmm_y_proba = validate_model(cleaned_X, y, means, covs, qs)
+gmm_y_proba = predict_proba(cleaned_X, means, covs, qs)
 
 gmm_y_pred = np.array([label_mapping.inverse[label] for label in np.argmax(gmm_y_proba, axis=-1)])
     
 print(classification_report(y, gmm_y_pred))
     
-cm = confusion_matrix(y, y_pred)
+cm = confusion_matrix(y, gmm_y_pred)
 sns.heatmap(cm, annot=True)
 plt.show()
 
 
 # %%
+gmm_y_all_proba = predict_proba(cleaned_X_all, means, covs, qs)
+gmm_y_all_pred = np.array([label_mapping.inverse[label] for label in np.argmax(gmm_y_all_proba, axis=-1)])
+
+
+print("predicted")
 sns.scatterplot(
     x='c1', 
     y='c2',
@@ -652,11 +660,20 @@ sns.scatterplot(
       'c1': X_pca_all[:, 0],
       'c2': X_pca_all[:, 1],
       'category': list(map(lambda x: categories.get(int(x), "undefined"),
-                          y_pred_all)),
+                          gmm_y_all_pred)),
         'correct': list(map(
-            lambda x : 15 if x[0] == x[1] else 1, zip(y_all, y_pred_all)))
+            lambda x : 15 if x[0] == x[1] else 1, zip(y_all, gmm_y_all_pred)))
   }))
 
+plt.show()
+
+# %%
+correct_labels_df = pd.read_csv(os.path.join("..", "data", "labels_trending"))
+
+print(classification_report(correct_labels_df.values, gmm_y_all_pred))
+
+cm = confusion_matrix(correct_labels_df.values, gmm_y_all_pred)
+sns.heatmap(cm, annot=True)
 plt.show()
 
 # %%

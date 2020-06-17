@@ -26,18 +26,14 @@ import scipy.stats as ss
 FIGURES_DIR=os.path.join('..', 'figures')
 
 # %%
-text_df = pd.read_csv(os.path.join('..', 'data', 'text_attributes_bedzju.csv'))
+text_df = pd.read_csv(os.path.join('..', 'data', 'text_attributes_all.csv'))
 img_df = pd.read_csv(os.path.join('..', 'data', 'image_attributes_bedzju.csv'))
 
 img_df_2 = pd.read_csv(os.path.join('..', 'data', 'image_attributes_nawrba.csv'))
-text_df_2 = pd.read_csv(os.path.join('..', 'data', 'text_attributes_nawrba.csv'))
-
-# %% [markdown]
-# #### Text DF preview
+# text_df_2 = pd.read_csv(os.path.join('..', 'data', 'text_attributes_nawrba.csv'))
 
 # %%
-print(text_df.shape, img_df_2.shape, text_df_2.shape)
-text_df.head()
+text_df.shape, img_df.shape, img_df_2.shape # text_df_2.shape,
 
 # %% [markdown]
 # #### Visual DF preview
@@ -57,12 +53,12 @@ img_df.head()
 # %%
 text_df["image_filename"] = text_df["thumbnail_link"].apply(lambda x : x.replace('/', '').replace(':', '_'))
 
-df = pd.concat([text_df, text_df_2, img_df_2], axis=1).set_index("image_filename").join(img_df.set_index("image_filename"))
+df = pd.concat([text_df, img_df_2], axis=1).merge(img_df, on=["image_filename"], how="left")
 print(df.shape)
 print(df.columns)
 
 df = df.reset_index()
-df.head()
+df
 
 # %%
 list(df[['channel_title_embed', 'transormed_tags_embed', 'thumbnail_ocr_embed']].dtypes)
@@ -242,7 +238,7 @@ agg_df = df.groupby("video_id").agg(
     description_length_newlines=("description_length_newlines", "median"),
     description_uppercase_ratio=("description_uppercase_ratio", "mean"),
     description_url_count=("description_url_count", "median"),
-    description_top_domains_count=("description_top_domains_count", "median"),
+#     description_top_domains_count=("description_top_domains_count", "median"),
     description_emojis_counts = ('emojis_counts', "median"),
     
     has_detection=("has_detection", max_with_nans),
@@ -279,6 +275,21 @@ agg_df = df.groupby("video_id").agg(
 agg_df["title_onehot"] = list(map(list, X_pca))
 agg_df.head()
 
+
+# %%
+import json
+import math
+
+with open(os.path.join("..", "data", "API_categories.json"), "r") as handle:
+    ids_to_categories_dict = json.load(handle)
+agg_df["category_id_true"] = agg_df[["category_id"]].apply(
+    # Fill missing categories
+    lambda row : int(ids_to_categories_dict.get(row.name, -1)) if math.isnan(row.category_id) or row.category_id == -1 else int(row.category_id),
+    axis=1
+)
+
+# %%
+agg_df[["category_id_true"]].to_csv(os.path.join("..", "data", "labels_trending"), index=False)
 
 # %% [markdown]
 # ### Extract subsets: numeric columns, non-numeric, histograms and videos with category_id given
@@ -542,6 +553,8 @@ stats = normalized_df.describe()
 std_deviations = stats.loc["std", :].sort_values(ascending=False)
 std_deviations.plot.bar(figsize=(14, 7), rot=45)
 
+# %%
+
 # %% [markdown]
 # > Feature selection is performed using ANOVA F measure via the f_classif() function.
 
@@ -559,6 +572,16 @@ def transform_onehot_df(df):
                 df[f"{prefix}_{i}_bin"] = df[cname].apply(lambda x : x[i])
             df = df.drop(columns=[cname])
     return df
+
+df_feature_selection = agg_df[FEATURE_SELECTION_COLUMNS]
+
+with open(os.path.join("..", "data", "API_categories.json"), "r") as handle:
+    ids_to_categories_dict = json.load(handle)
+df_feature_selection["category_id"] = df_feature_selection[["category_id"]].apply(
+    # Fill missing categories
+    lambda row : ids_to_categories_dict.get(row.name, -1) if math.isnan(row.category_id) or row.category_id == -1 else row.category_id,
+    axis=1
+)
 
 categories_df_numeric = transform_histogram_df(categories_df)
 categories_df_numeric = transform_onehot_df(categories_df)
@@ -632,7 +655,7 @@ print(list(X_columns[cols]))
 with open(os.path.join("..", "data", "mi_best.json"), "w") as fp:
     json.dump(list(X_columns[cols]), fp)
 
-# %%
+# %% jupyter={"outputs_hidden": true}
 import matplotlib.pyplot as plt
 from sklearn.svm import SVC
 from sklearn.model_selection import StratifiedKFold
@@ -643,10 +666,11 @@ from sklearn.datasets import make_classification
 svc = SVC(kernel="linear", class_weight='balanced')
 # The "accuracy" scoring is proportional to the number of correct
 # classifications
-rfecv = RFECV(estimator=svc, step=1, cv=StratifiedKFold(n_splits=15, shuffle=True, random_state=15042020),
-              scoring='accuracy')
+rfecv = RFECV(estimator=svc, step=10, cv=StratifiedKFold(n_splits=15, shuffle=True, random_state=15042020),
+              scoring='accuracy', verbose=3)
 rfecv.fit(X, y)
 
+# %%
 print("Optimal number of features : %d" % rfecv.n_features_)
 
 # Plot number of features VS. cross-validation scores
